@@ -4,6 +4,14 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card } from './ui/card';
 
+// =======================
+// Type Definitions
+// =======================
+interface SavedSelection {
+  selection: GridSelection;
+  color: string;
+}
+
 interface GridSelection {
   startRow: number;
   startCol: number;
@@ -18,7 +26,50 @@ interface GridProperties {
   gridRowEnd: number;
 }
 
+// =======================
+// Color Definitions
+// =======================
+const RANDOM_COLORS: { [hex: string]: string } = {
+  "#e57373": "Light Red (Pastel Red)",
+  "#f06292": "Pink (Medium Pink)",
+  "#ba68c8": "Lavender Purple (Medium Purple)",
+  "#9575cd": "Light Purple (Soft Violet)",
+  "#7986cb": "Periwinkle Blue (Muted Blue)",
+  "#64b5f6": "Sky Blue (Light Blue)",
+  "#4fc3f7": "Cyan Blue (Bright Cyan)",
+  "#4dd0e1": "Turquoise (Light Teal)",
+  "#4db6ac": "Aqua Green (Muted Teal)",
+  "#81c784": "Light Green (Pastel Green)",
+  "#aed581": "Yellow Green (Lime Green)",
+  "#dce775": "Light Lime (Pale Yellow-Green)",
+  "#fff176": "Light Yellow (Lemon Yellow)",
+  "#ffd54f": "Gold (Light Gold)",
+  "#ffb74d": "Orange (Light Orange)",
+  "#ff8a65": "Salmon (Light Coral)",
+  "#a1887f": "Taupe (Light Brown/Gray)",
+  "#e0e0e0": "Light Gray",
+  "#90a4ae": "Blue Gray (Cool Gray)",
+  "#bdbdbd": "Medium Gray"
+};
+
+// =======================
+// Utility Function
+// =======================
+const getRandomColor = (usedColorsRef: React.MutableRefObject<string[]>) => {
+  if (usedColorsRef.current.length === Object.keys(RANDOM_COLORS).length) usedColorsRef.current = [];
+  const available = Object.keys(RANDOM_COLORS).filter(c => !usedColorsRef.current.includes(c));
+  const color = available[Math.floor(Math.random() * available.length)];
+  usedColorsRef.current.push(color);
+  return color;
+}
+
+// =======================
+// Main Component
+// =======================
 const GridTeachingTool: React.FC = () => {
+  // -------------
+  // State & Refs
+  // -------------
   const [rows, setRows] = useState(6);
   const [cols, setCols] = useState(8);
   const [selection, setSelection] = useState<GridSelection | null>(null);
@@ -26,9 +77,17 @@ const GridTeachingTool: React.FC = () => {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [showTooltip, setShowTooltip] = useState(false);
   const [groupColor, setGroupColor] = useState<string>('primary');
+  const [selectionColor, setSelectionColor] = useState<string | null>(null);
+  const [savedSelections, setSavedSelections] = useState<SavedSelection[]>([]);
+  const [hoveredSelection, setHoveredSelection] = useState<SavedSelection | null>(null);
   
   const gridRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<GridSelection | null>(null);
+  const usedColorsRef = useRef<string[]>([]);
+
+  // =======================
+  // Selection Logic
+  // =======================
 
   // Calculate grid properties from selection
   const calculateProperties = useCallback((sel: GridSelection): GridProperties => {
@@ -75,6 +134,9 @@ const GridTeachingTool: React.FC = () => {
     setSelection(newSelection);
     selectionRef.current = newSelection;
     setShowTooltip(true);
+
+     // Pick a random color for this selection
+    setSelectionColor(getRandomColor(usedColorsRef));
     
     // Update tooltip position
     const position = getEventPosition(e);
@@ -101,25 +163,87 @@ const GridTeachingTool: React.FC = () => {
     setTooltipPos({ x: position.x + 20, y: position.y - 10 });
   }, [isSelecting, getCellFromEvent, getEventPosition]);
 
-  // Handle mouse up - end selection
+  // Check if cell is selected in any saved selection
+  const getCellColor = useCallback((row: number, col: number): string | null => {
+    // Check current selection first (for live feedback)
+    if (selection && selectionColor) {
+      const minRow = Math.min(selection.startRow, selection.endRow);
+      const maxRow = Math.max(selection.startRow, selection.endRow);
+      const minCol = Math.min(selection.startCol, selection.endCol);
+      const maxCol = Math.max(selection.startCol, selection.endCol);
+      if (row >= minRow && row <= maxRow && col >= minCol && col <= maxCol) {
+        return selectionColor;
+      }
+    }
+    // Check saved selections
+    for (const saved of savedSelections) {
+      const { startRow, endRow, startCol, endCol } = saved.selection;
+      const minRow = Math.min(startRow, endRow);
+      const maxRow = Math.max(startRow, endRow);
+      const minCol = Math.min(startCol, endCol);
+      const maxCol = Math.max(startCol, endCol);
+      if (row >= minRow && row <= maxRow && col >= minCol && col <= maxCol) {
+        return saved.color;
+      }
+    }
+    return null;
+  }, [selection, selectionColor, savedSelections]);
+
+  // On mouse up, save the selection if valid and not already saved
   const handleMouseUp = useCallback(() => {
-    if (isSelecting) {
+    if (isSelecting && selection && selectionColor) {
+      // Save only if not already present
+      setSavedSelections(prev => [
+        ...prev,
+        { selection, color: selectionColor }
+      ]);
+      setSelection(null);
+      setSelectionColor(null);
+      setIsSelecting(false);
+    } else if (isSelecting) {
       setIsSelecting(false);
     }
-  }, [isSelecting]);
+  }, [isSelecting, selection, selectionColor]);
 
   // Handle selection hover
   const handleSelectionHover = useCallback((e: React.MouseEvent) => {
-    if (!selection || isSelecting) return;
-    setShowTooltip(true);
-    setTooltipPos({ x: e.clientX + 20, y: e.clientY - 10 });
-  }, [selection, isSelecting]);
+    if (isSelecting) return;
+    const target = e.target as HTMLElement;
+    if (!target.classList.contains('grid-cell')) {
+      setShowTooltip(false);
+      setHoveredSelection(null);
+      return;
+    }
+    const row = parseInt(target.dataset.row || '0');
+    const col = parseInt(target.dataset.col || '0');
 
-  // Clear selection
+    // Find if this cell is in any saved selection
+    const found = savedSelections.find(saved => {
+      const { startRow, endRow, startCol, endCol } = saved.selection;
+      const minRow = Math.min(startRow, endRow);
+      const maxRow = Math.max(startRow, endRow);
+      const minCol = Math.min(startCol, endCol);
+      const maxCol = Math.max(startCol, endCol);
+      return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
+    });
+
+    if (found) {
+      setHoveredSelection(found);
+      setShowTooltip(true);
+      setTooltipPos({ x: e.clientX + 20, y: e.clientY - 10 });
+    } else {
+      setShowTooltip(false);
+      setHoveredSelection(null);
+    }
+  }, [isSelecting, savedSelections]);
+
+  // Clear all selections
   const clearSelection = useCallback(() => {
     setSelection(null);
     setShowTooltip(false);
     selectionRef.current = null;
+    setSelectionColor(null);
+    setSavedSelections([]); // clear all saved selections
   }, []);
 
   // Check if cell is selected
@@ -131,6 +255,10 @@ const GridTeachingTool: React.FC = () => {
     const maxCol = Math.max(selection.startCol, selection.endCol);
     return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
   }, [selection]);
+
+  // =======================
+  // Effects
+  // =======================
 
   // Add global mouse/touch up listeners
   useEffect(() => {
@@ -154,10 +282,10 @@ const GridTeachingTool: React.FC = () => {
       if (!selection || isSelecting) return;
       
       const target = e.target as HTMLElement;
-      const isOverSelection = target.classList.contains('grid-cell') && 
-                             target.dataset.row !== undefined && 
-                             target.dataset.col !== undefined &&
-                             isCellSelected(parseInt(target.dataset.row), parseInt(target.dataset.col));
+      const isOverSelection = target.classList.contains('grid-cell')
+        && target.dataset.row !== undefined
+        && target.dataset.col !== undefined
+        && isCellSelected(parseInt(target.dataset.row), parseInt(target.dataset.col));
       
       if (!isOverSelection) {
         setShowTooltip(false);
@@ -168,11 +296,20 @@ const GridTeachingTool: React.FC = () => {
     return () => document.removeEventListener('mousemove', handleGlobalMouseMove);
   }, [selection, isSelecting, isCellSelected]);
 
-  const gridProperties = selection ? calculateProperties(selection) : null;
+  
+  // =======================
+  // Render
+  // =======================
+
+  const tooltipSelection = hoveredSelection ? hoveredSelection.selection : selection;
+  const tooltipColor = hoveredSelection ? hoveredSelection.color : selectionColor;
+  const gridProperties = tooltipSelection ? calculateProperties(tooltipSelection) : null;
 
   return (
     <div className="min-h-screen bg-[var(--gradient-background)] p-6">
-      {/* Header */}
+      {/* =======================
+          Header
+      ======================= */}
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-[var(--gradient-primary)] bg-clip-text text-transparent mb-4">
@@ -184,7 +321,9 @@ const GridTeachingTool: React.FC = () => {
           </p>
         </div>
 
-        {/* Controls */}
+        {/* =======================
+            Controls
+        ======================= */}
         <Card className="p-6 mb-8 shadow-[var(--shadow-soft)]">
           <div className="flex flex-wrap items-end gap-6">
             <div className="flex-1 min-w-[150px]">
@@ -229,23 +368,19 @@ const GridTeachingTool: React.FC = () => {
               <Label htmlFor="groupColor" className="text-sm font-medium mb-2 block">
                 Group Color
               </Label>
-              <select
+              <Input
                 id="groupColor"
-                value={groupColor}
-                onChange={(e) => setGroupColor(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="primary">Purple</option>
-                <option value="accent">Teal</option>
-                <option value="secondary">Gray</option>
-                <option value="destructive">Red</option>
-              </select>
+                type="text"
+                value={RANDOM_COLORS[selectionColor]}
+                className="w-full"
+                readOnly
+              />
             </div>
 
             <Button
               onClick={clearSelection}
               variant="outline"
-              disabled={!selection}
+              disabled={!selection && savedSelections.length === 0}
               className="whitespace-nowrap"
             >
               Clear Selection
@@ -253,16 +388,20 @@ const GridTeachingTool: React.FC = () => {
           </div>
         </Card>
 
-        {/* Grid Container */}
+        {/* =======================
+            Grid Container
+        ======================= */}
         <div className="relative">
-          <Card className="p-8 shadow-[var(--shadow-grid)] overflow-auto">
+          <Card className="p-8 shadow-[var(--shadow-grid)] overflow-visible mx-auto">
             <div
               ref={gridRef}
-              className="grid gap-1 w-full max-w-6xl mx-auto relative select-none"
+              className="grid gap-1 w-full mx-auto relative select-none"
               style={{
-                gridTemplateRows: `repeat(${rows}, minmax(40px, 1fr))`,
-                gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))`,
+                gridTemplateRows: `repeat(${rows}, minmax(24px, 1fr))`,
+                gridTemplateColumns: `repeat(${cols}, minmax(24px, 1fr))`,
                 aspectRatio: `${cols} / ${rows}`,
+                // maxWidth: "800px",
+                // minWidth: "320px",
               }}
               onMouseUp={handleMouseUp}
               onTouchEnd={handleMouseUp}
@@ -271,20 +410,11 @@ const GridTeachingTool: React.FC = () => {
               {Array.from({ length: rows * cols }, (_, index) => {
                 const row = Math.floor(index / cols);
                 const col = index % cols;
-                const selected = isCellSelected(row, col);
+                const cellColor = getCellColor(row, col);
 
                 const getSelectionStyles = () => {
-                  if (!selected) return '';
-                  switch (groupColor) {
-                    case 'accent':
-                      return 'bg-accent/20 border-accent';
-                    case 'secondary':
-                      return 'bg-secondary/40 border-secondary-foreground';
-                    case 'destructive':
-                      return 'bg-destructive/20 border-destructive';
-                    default:
-                      return 'bg-grid-selection/20 border-grid-selection';
-                  }
+                  if (!cellColor) return '';
+                  return `border-2 border-black`;
                 };
 
                 return (
@@ -294,7 +424,7 @@ const GridTeachingTool: React.FC = () => {
                       grid-cell border border-grid-cell-border bg-grid-cell 
                       hover:bg-grid-cell-hover cursor-pointer transition-all duration-150
                       flex items-center justify-center text-xs text-muted-foreground
-                      min-h-[40px] touch-manipulation
+                      min-h-[24px] touch-manipulation
                       ${getSelectionStyles()}
                     `}
                     data-row={row}
@@ -304,6 +434,7 @@ const GridTeachingTool: React.FC = () => {
                     onMouseMove={handleSelectionHover}
                     onTouchStart={handleStartSelection}
                     onTouchMove={handleUpdateSelection}
+                    style={cellColor ? { backgroundColor: cellColor } : undefined}
                   >
                     <span className="pointer-events-none">
                       {row + 1},{col + 1}
@@ -314,7 +445,9 @@ const GridTeachingTool: React.FC = () => {
             </div>
           </Card>
 
-          {/* Tooltip */}
+          {/* =======================
+              Tooltip
+          ======================= */}
           {showTooltip && gridProperties && (
             <div
               className="fixed z-50 pointer-events-none"
@@ -357,7 +490,9 @@ const GridTeachingTool: React.FC = () => {
           )}
         </div>
 
-        {/* Instructions */}
+        {/* =======================
+            Instructions (How to Use the Tool)
+        ======================= */}
         <Card className="mt-8 p-6">
           <h2 className="text-xl font-semibold mb-4">How to Use</h2>
           <div className="grid md:grid-cols-2 gap-6 text-sm">
@@ -370,11 +505,13 @@ const GridTeachingTool: React.FC = () => {
               </ul>
             </div>
             <div>
-              <h3 className="font-medium mb-2 text-accent">📏 Understanding Grid Lines</h3>
+              <h3 className="font-medium mb-2 text-accent">📏 Understanding CSS Grid</h3>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• Grid lines are numbered starting from 1</li>
-                <li>• End values are exclusive (like CSS)</li>
-                <li>• Column 1-3 spans from line 1 to line 3</li>
+                <li>• Both rows and columns are defined by lines, not by cells.</li>
+                <li>e.g. starting from 1, a grid with 3 columns will have 4 vertical grid lines (1, 2, 3, 4)</li>
+                <li>• When you specify a grid area using grid-column or grid-row, the end value is exclusive.</li>
+                <li>e.g. grid-column: 1 / 4 covers columns between lines 1 and 4 (columns 1 and 3).</li>
+                <li>e.g. grid-row: 1 / 3 covers rows between lines 1 and 3 (rows 1 and 2).</li>
               </ul>
             </div>
           </div>
