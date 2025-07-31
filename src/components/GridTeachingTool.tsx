@@ -30,25 +30,25 @@ interface GridProperties {
 // Color Definitions
 // =======================
 const RANDOM_COLORS: { [hex: string]: string } = {
-  "#e57373": "Light Red (Pastel Red)",
-  "#f06292": "Pink (Medium Pink)",
-  "#ba68c8": "Lavender Purple (Medium Purple)",
-  "#9575cd": "Light Purple (Soft Violet)",
-  "#7986cb": "Periwinkle Blue (Muted Blue)",
-  "#64b5f6": "Sky Blue (Light Blue)",
-  "#4fc3f7": "Cyan Blue (Bright Cyan)",
-  "#4dd0e1": "Turquoise (Light Teal)",
-  "#4db6ac": "Aqua Green (Muted Teal)",
-  "#81c784": "Light Green (Pastel Green)",
-  "#aed581": "Yellow Green (Lime Green)",
-  "#dce775": "Light Lime (Pale Yellow-Green)",
-  "#fff176": "Light Yellow (Lemon Yellow)",
-  "#ffd54f": "Gold (Light Gold)",
-  "#ffb74d": "Orange (Light Orange)",
-  "#ff8a65": "Salmon (Light Coral)",
-  "#a1887f": "Taupe (Light Brown/Gray)",
+  "#e57373": "Light Red",
+  "#f06292": "Pink",
+  "#ba68c8": "Lavender Purple",
+  "#9575cd": "Light Purple",
+  "#7986cb": "Periwinkle Blue",
+  "#64b5f6": "Sky Blue",
+  "#4fc3f7": "Cyan Blue",
+  "#4dd0e1": "Turquoise",
+  "#4db6ac": "Aqua Green",
+  "#81c784": "Light Green",
+  "#aed581": "Yellow Green",
+  "#dce775": "Light Lime",
+  "#fff176": "Light Yellow",
+  "#ffd54f": "Gold",
+  "#ffb74d": "Orange",
+  "#ff8a65": "Salmon",
+  "#a1887f": "Taupe",
   "#e0e0e0": "Light Gray",
-  "#90a4ae": "Blue Gray (Cool Gray)",
+  "#90a4ae": "Blue Gray",
   "#bdbdbd": "Medium Gray"
 };
 
@@ -483,6 +483,19 @@ const GridTeachingTool: React.FC = () => {
                   <div className="text-xs font-mono leading-relaxed">
                     <div>grid-column: {gridProperties.gridColumnStart} / {gridProperties.gridColumnEnd};</div>
                     <div>grid-row: {gridProperties.gridRowStart} / {gridProperties.gridRowEnd};</div>
+                  </div>
+                </div>
+
+                {/* Grid Item Component Preview*/}
+                <div className="mt-4 pt-3 border-t border-grid-tooltip-foreground/20">
+                  <p className="text-xs text-primary-glow mb-2">Defining Grid Item (Component):</p>
+                  <div className="text-xs font-mono leading-relaxed">
+                    <div>{'<GridItem'}</div>
+                    <div>{`colStart={${gridProperties.gridColumnStart}} colEnd={${gridProperties.gridColumnEnd}}`}</div>
+                    <div>{`rowStart={${gridProperties.gridRowStart}} rowEnd={${gridProperties.gridRowEnd}}`}</div>
+                    <div>{`>`}</div>
+                    <div>{'{INSERT CHILDREN}'}</div>
+                    <div>{'</GridItem>'}</div>
                   </div>
                 </div>
               </Card>
