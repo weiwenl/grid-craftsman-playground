@@ -25,6 +25,7 @@ const GridTeachingTool: React.FC = () => {
   const [isSelecting, setIsSelecting] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [showTooltip, setShowTooltip] = useState(false);
+  const [groupColor, setGroupColor] = useState<string>('primary');
   
   const gridRef = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<GridSelection | null>(null);
@@ -39,8 +40,8 @@ const GridTeachingTool: React.FC = () => {
     };
   }, []);
 
-  // Get cell position from mouse event
-  const getCellFromEvent = useCallback((e: React.MouseEvent): { row: number; col: number } | null => {
+  // Get cell position from mouse or touch event
+  const getCellFromEvent = useCallback((e: React.MouseEvent | React.TouchEvent): { row: number; col: number } | null => {
     const target = e.target as HTMLElement;
     if (!target.classList.contains('grid-cell')) return null;
     
@@ -49,8 +50,18 @@ const GridTeachingTool: React.FC = () => {
     return { row, col };
   }, []);
 
-  // Handle mouse down - start selection
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  // Get position from mouse or touch event
+  const getEventPosition = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if ('touches' in e) {
+      const touch = e.touches[0] || e.changedTouches[0];
+      return { x: touch.clientX, y: touch.clientY };
+    }
+    return { x: e.clientX, y: e.clientY };
+  }, []);
+
+  // Handle mouse/touch down - start selection
+  const handleStartSelection = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
     const cell = getCellFromEvent(e);
     if (!cell) return;
 
@@ -66,11 +77,12 @@ const GridTeachingTool: React.FC = () => {
     setShowTooltip(true);
     
     // Update tooltip position
-    setTooltipPos({ x: e.clientX + 20, y: e.clientY - 10 });
-  }, [getCellFromEvent]);
+    const position = getEventPosition(e);
+    setTooltipPos({ x: position.x + 20, y: position.y - 10 });
+  }, [getCellFromEvent, getEventPosition]);
 
-  // Handle mouse enter - update selection during drag
-  const handleMouseEnter = useCallback((e: React.MouseEvent) => {
+  // Handle mouse/touch move - update selection during drag
+  const handleUpdateSelection = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     if (!isSelecting || !selectionRef.current) return;
     
     const cell = getCellFromEvent(e);
@@ -85,8 +97,9 @@ const GridTeachingTool: React.FC = () => {
     selectionRef.current = newSelection;
     
     // Update tooltip position
-    setTooltipPos({ x: e.clientX + 20, y: e.clientY - 10 });
-  }, [isSelecting, getCellFromEvent]);
+    const position = getEventPosition(e);
+    setTooltipPos({ x: position.x + 20, y: position.y - 10 });
+  }, [isSelecting, getCellFromEvent, getEventPosition]);
 
   // Handle mouse up - end selection
   const handleMouseUp = useCallback(() => {
@@ -119,7 +132,7 @@ const GridTeachingTool: React.FC = () => {
     return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol;
   }, [selection]);
 
-  // Add global mouse up listener
+  // Add global mouse/touch up listeners
   useEffect(() => {
     const handleGlobalMouseUp = () => {
       if (isSelecting) {
@@ -128,7 +141,11 @@ const GridTeachingTool: React.FC = () => {
     };
 
     document.addEventListener('mouseup', handleGlobalMouseUp);
-    return () => document.removeEventListener('mouseup', handleGlobalMouseUp);
+    document.addEventListener('touchend', handleGlobalMouseUp);
+    return () => {
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('touchend', handleGlobalMouseUp);
+    };
   }, [isSelecting]);
 
   // Hide tooltip when not hovering selection
@@ -170,7 +187,7 @@ const GridTeachingTool: React.FC = () => {
         {/* Controls */}
         <Card className="p-6 mb-8 shadow-[var(--shadow-soft)]">
           <div className="flex flex-wrap items-end gap-6">
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[150px]">
               <Label htmlFor="rows" className="text-sm font-medium mb-2 block">
                 Number of Rows
               </Label>
@@ -189,7 +206,7 @@ const GridTeachingTool: React.FC = () => {
               />
             </div>
             
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[150px]">
               <Label htmlFor="cols" className="text-sm font-medium mb-2 block">
                 Number of Columns
               </Label>
@@ -208,6 +225,23 @@ const GridTeachingTool: React.FC = () => {
               />
             </div>
 
+            <div className="flex-1 min-w-[150px]">
+              <Label htmlFor="groupColor" className="text-sm font-medium mb-2 block">
+                Group Color
+              </Label>
+              <select
+                id="groupColor"
+                value={groupColor}
+                onChange={(e) => setGroupColor(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="primary">Purple</option>
+                <option value="accent">Teal</option>
+                <option value="secondary">Gray</option>
+                <option value="destructive">Red</option>
+              </select>
+            </div>
+
             <Button
               onClick={clearSelection}
               variant="outline"
@@ -224,18 +258,34 @@ const GridTeachingTool: React.FC = () => {
           <Card className="p-8 shadow-[var(--shadow-grid)] overflow-auto">
             <div
               ref={gridRef}
-              className="grid gap-1 min-w-[1920px] min-h-[800px] mx-auto relative select-none"
+              className="grid gap-1 w-full max-w-6xl mx-auto relative select-none"
               style={{
-                gridTemplateRows: `repeat(${rows}, 1fr)`,
-                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gridTemplateRows: `repeat(${rows}, minmax(40px, 1fr))`,
+                gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))`,
+                aspectRatio: `${cols} / ${rows}`,
               }}
               onMouseUp={handleMouseUp}
+              onTouchEnd={handleMouseUp}
             >
               {/* Grid Cells */}
               {Array.from({ length: rows * cols }, (_, index) => {
                 const row = Math.floor(index / cols);
                 const col = index % cols;
                 const selected = isCellSelected(row, col);
+
+                const getSelectionStyles = () => {
+                  if (!selected) return '';
+                  switch (groupColor) {
+                    case 'accent':
+                      return 'bg-accent/20 border-accent';
+                    case 'secondary':
+                      return 'bg-secondary/40 border-secondary-foreground';
+                    case 'destructive':
+                      return 'bg-destructive/20 border-destructive';
+                    default:
+                      return 'bg-grid-selection/20 border-grid-selection';
+                  }
+                };
 
                 return (
                   <div
@@ -244,13 +294,16 @@ const GridTeachingTool: React.FC = () => {
                       grid-cell border border-grid-cell-border bg-grid-cell 
                       hover:bg-grid-cell-hover cursor-pointer transition-all duration-150
                       flex items-center justify-center text-xs text-muted-foreground
-                      ${selected ? 'bg-grid-selection/20 border-grid-selection' : ''}
+                      min-h-[40px] touch-manipulation
+                      ${getSelectionStyles()}
                     `}
                     data-row={row}
                     data-col={col}
-                    onMouseDown={handleMouseDown}
-                    onMouseEnter={handleMouseEnter}
+                    onMouseDown={handleStartSelection}
+                    onMouseEnter={handleUpdateSelection}
                     onMouseMove={handleSelectionHover}
+                    onTouchStart={handleStartSelection}
+                    onTouchMove={handleUpdateSelection}
                   >
                     <span className="pointer-events-none">
                       {row + 1},{col + 1}
